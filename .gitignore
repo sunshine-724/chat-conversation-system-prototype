@@ -10,6 +10,7 @@ __pycache__/
 venv/
 env/
 *.env
+.uv/
 
 # Node (Frontend)
 node_modules/
