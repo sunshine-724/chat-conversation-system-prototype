@@ -77,22 +77,58 @@ export default function ChatInterface() {
         }
     };
 
+    const handleExport = async () => {
+        try {
+            const response = await fetch("http://localhost:8000/export", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({ messages }),
+            });
+
+            if (!response.ok) throw new Error("Export failed");
+
+            const blob = await response.blob();
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = `chat_history_${new Date().toISOString().slice(0, 19).replace(/:/g, "-")}.json`;
+            document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(url);
+            document.body.removeChild(a);
+        } catch (error) {
+            console.error("Export error:", error);
+            alert("Failed to export chat history");
+        }
+    };
+
     return (
         <div className="flex flex-col h-screen bg-gray-900 text-gray-100">
             <header className="p-4 border-b border-gray-800 bg-gray-950 flex justify-between items-center">
                 <h1 className="text-xl font-semibold bg-gradient-to-r from-blue-400 to-purple-500 bg-clip-text text-transparent">
                     AI Chat Prototype
                 </h1>
-                <select
-                    value={selectedModel}
-                    onChange={(e) => setSelectedModel(e.target.value)}
-                    className="bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                    <option value="qwen2.5:32b">Qwen 2.5 (32B)</option>
-                    <option value="qwen2.5:14b">Qwen 2.5 (14B)</option>
-                    <option value="qwen2.5:7b">Qwen 2.5 (7B)</option>
-                    <option value="llama3:8b">Llama 3 (8B)</option>
-                </select>
+                <div className="flex gap-2">
+                    <select
+                        value={selectedModel}
+                        onChange={(e) => setSelectedModel(e.target.value)}
+                        className="bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                        <option value="qwen2.5:32b">Qwen 2.5 (32B)</option>
+                        <option value="qwen2.5:14b">Qwen 2.5 (14B)</option>
+                        <option value="qwen2.5:7b">Qwen 2.5 (7B)</option>
+                        <option value="llama3:8b">Llama 3 (8B)</option>
+                    </select>
+                    <button
+                        onClick={handleExport}
+                        className="bg-gray-800 hover:bg-gray-700 border border-gray-700 text-white rounded-lg px-3 py-1 text-sm transition-colors"
+                        title="Export Chat"
+                    >
+                        Export
+                    </button>
+                </div>
             </header>
 
             <main className="flex-1 overflow-y-auto p-4 space-y-4">
