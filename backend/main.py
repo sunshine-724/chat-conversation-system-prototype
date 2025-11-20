@@ -55,3 +55,29 @@ async def chat(message: str, model: str = "qwen2.5:32b"):
                 await asyncio.sleep(0.1)
 
     return StreamingResponse(generate_response(), media_type="text/plain")
+
+from pydantic import BaseModel
+from typing import List
+import datetime
+
+class Message(BaseModel):
+    role: str
+    content: str
+
+class ChatHistory(BaseModel):
+    messages: List[Message]
+
+@app.post("/export")
+async def export_chat(history: ChatHistory):
+    # Create a formatted string or JSON structure
+    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    filename = f"chat_history_{timestamp}.json"
+    
+    # For now, just dumping the JSON
+    content = history.model_dump_json(indent=2)
+    
+    return StreamingResponse(
+        iter([content]),
+        media_type="application/json",
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )
