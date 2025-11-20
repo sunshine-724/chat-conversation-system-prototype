@@ -15,6 +15,7 @@ export default function ChatInterface() {
     const [isLoading, setIsLoading] = useState(false);
     const [selectedModel, setSelectedModel] = useState("");
     const [models, setModels] = useState<string[]>([]);
+    const [tokenUsage, setTokenUsage] = useState({ prompt_eval_count: 0, eval_count: 0 });
     const messagesEndRef = useRef<HTMLDivElement>(null);
 
     const scrollToBottom = () => {
@@ -42,7 +43,8 @@ export default function ChatInterface() {
         if (!input.trim() || !selectedModel) return;
 
         const userMessage: Message = { role: "user", content: input };
-        setMessages((prev) => [...prev, userMessage]);
+        const newMessages = [...messages, userMessage];
+        setMessages(newMessages);
         setInput("");
         setIsLoading(true);
 
@@ -50,12 +52,16 @@ export default function ChatInterface() {
         setMessages((prev) => [...prev, { role: "assistant", content: "" }]);
 
         try {
-            const response = await fetch(
-                `http://localhost:8000/chat?message=${encodeURIComponent(input)}&model=${encodeURIComponent(selectedModel)}`,
-                {
-                    method: "POST",
-                }
-            );
+            const response = await fetch("http://localhost:8000/chat", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                    messages: newMessages,
+                    model: selectedModel,
+                }),
+            });
 
             if (!response.ok) {
                 throw new Error("Network response was not ok");
@@ -66,23 +72,45 @@ export default function ChatInterface() {
             const reader = response.body.getReader();
             const decoder = new TextDecoder();
             let done = false;
+            let buffer = "";
 
             while (!done) {
                 const { value, done: doneReading } = await reader.read();
                 done = doneReading;
                 const chunkValue = decoder.decode(value, { stream: true });
+                buffer += chunkValue;
 
-                setMessages((prev) => {
-                    const newMessages = [...prev];
-                    const lastMessageIndex = newMessages.length - 1;
-                    const lastMessage = { ...newMessages[lastMessageIndex] }; // Create a copy
+                const lines = buffer.split("\n");
+                buffer = lines.pop() || ""; // Keep the last incomplete line in buffer
 
-                    if (lastMessage.role === "assistant") {
-                        lastMessage.content += chunkValue;
-                        newMessages[lastMessageIndex] = lastMessage; // Update the array with the copy
+                for (const line of lines) {
+                    if (!line.trim()) continue;
+
+                    try {
+                        const data = JSON.parse(line);
+
+                        if (data.type === "content") {
+                            setMessages((prev) => {
+                                const newMessages = [...prev];
+                                const lastMessageIndex = newMessages.length - 1;
+                                const lastMessage = { ...newMessages[lastMessageIndex] };
+
+                                if (lastMessage.role === "assistant") {
+                                    lastMessage.content += data.content;
+                                    newMessages[lastMessageIndex] = lastMessage;
+                                }
+                                return newMessages;
+                            });
+                        } else if (data.type === "usage") {
+                            setTokenUsage({
+                                prompt_eval_count: data.prompt_eval_count,
+                                eval_count: data.eval_count
+                            });
+                        }
+                    } catch (e) {
+                        console.error("Error parsing JSON line:", e);
                     }
-                    return newMessages;
-                });
+                }
             }
         } catch (error) {
             console.error("Error:", error);
@@ -125,9 +153,14 @@ export default function ChatInterface() {
     return (
         <div className="flex flex-col h-screen bg-gray-900 text-gray-100">
             <header className="p-4 border-b border-gray-800 bg-gray-950 flex justify-between items-center">
-                <h1 className="text-xl font-semibold bg-gradient-to-r from-blue-400 to-purple-500 bg-clip-text text-transparent">
-                    AI Chat Prototype
-                </h1>
+                <div className="flex flex-col">
+                    <h1 className="text-xl font-semibold bg-gradient-to-r from-blue-400 to-purple-500 bg-clip-text text-transparent">
+                        AI Chat Prototype
+                    </h1>
+                    <span className="text-xs text-gray-500">
+                        Context Tokens: {tokenUsage.prompt_eval_count + tokenUsage.eval_count} (Prompt: {tokenUsage.prompt_eval_count}, Response: {tokenUsage.eval_count})
+                    </span>
+                </div>
                 <div className="flex gap-2">
                     <select
                         value={selectedModel}

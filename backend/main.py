@@ -1,6 +1,16 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
+from pydantic import BaseModel
+from typing import List
 import ollama
+import asyncio
+import json
+import datetime
+
+class Message(BaseModel):
+    role: str
+    content: str
 
 app = FastAPI()
 
@@ -27,42 +37,52 @@ def get_models():
         print(f"Error fetching models: {e}")
         return {"models": []}
 
-from fastapi.responses import StreamingResponse
-import asyncio
-import json
+
+
+class ChatRequest(BaseModel):
+    messages: List[Message]
+    model: str = "qwen2.5:32b"
 
 @app.post("/chat")
-async def chat(message: str, model: str = "qwen2.5:32b"):
+async def chat(request: ChatRequest):
     async def generate_response():
         try:
+            # Convert Pydantic models to dicts for Ollama
+            messages = [m.model_dump() for m in request.messages]
+            
             stream = ollama.chat(
-                model=model,
-                messages=[{'role': 'user', 'content': message}],
+                model=request.model,
+                messages=messages,
                 stream=True,
             )
-            for chunk in stream:
-                yield chunk['message']['content']
             
-            # Stop here if successful
-            return
-
+            for chunk in stream:
+                # Yield content chunk
+                if 'message' in chunk and 'content' in chunk['message']:
+                    content_data = {
+                        "type": "content",
+                        "content": chunk['message']['content']
+                    }
+                    yield json.dumps(content_data) + "\n"
+                
+                # Yield usage chunk if available (usually in the last chunk)
+                if chunk.get('done') is True:
+                    usage_data = {
+                        "type": "usage",
+                        "prompt_eval_count": chunk.get('prompt_eval_count', 0),
+                        "eval_count": chunk.get('eval_count', 0)
+                    }
+                    yield json.dumps(usage_data) + "\n"
+            
         except Exception as e:
             print(f"Ollama error: {e}")
-            # Fallback/Simulation only on error
-            full_response = f"Echo [{model}] (Streamed): {message} "
-            for word in full_response.split():
-                yield word + " "
-                await asyncio.sleep(0.1)
+            error_data = {
+                "type": "content", 
+                "content": f"Error: {str(e)}"
+            }
+            yield json.dumps(error_data) + "\n"
 
-    return StreamingResponse(generate_response(), media_type="text/plain")
-
-from pydantic import BaseModel
-from typing import List
-import datetime
-
-class Message(BaseModel):
-    role: str
-    content: str
+    return StreamingResponse(generate_response(), media_type="application/x-ndjson")
 
 class ChatHistory(BaseModel):
     messages: List[Message]
