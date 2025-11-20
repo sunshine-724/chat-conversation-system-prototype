@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 
 interface Message {
     role: "user" | "assistant";
@@ -127,12 +129,12 @@ export default function ChatInterface() {
                     AI Chat Prototype
                 </h1>
                 <div className="flex gap-2">
-                      <select
+                    <select
                         value={selectedModel}
                         onChange={(e) => setSelectedModel(e.target.value)}
                         className="bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                         disabled={models.length === 0}
-                      >
+                    >
                         {models.length === 0 ? (
                             <option value="">No models found</option>
                         ) : (
@@ -171,7 +173,15 @@ export default function ChatInterface() {
                                 : "bg-gray-800 text-gray-200"
                                 }`}
                         >
-                            {msg.content}
+                            {msg.role === "assistant" ? (
+                                <div className="prose prose-invert max-w-none prose-p:my-1 prose-pre:bg-gray-900 prose-pre:p-2 prose-pre:rounded-lg">
+                                    <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                                        {msg.content}
+                                    </ReactMarkdown>
+                                </div>
+                            ) : (
+                                msg.content
+                            )}
                         </div>
                     </div>
                 ))}
