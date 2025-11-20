@@ -11,7 +11,8 @@ export default function ChatInterface() {
     const [messages, setMessages] = useState<Message[]>([]);
     const [input, setInput] = useState("");
     const [isLoading, setIsLoading] = useState(false);
-    const [selectedModel, setSelectedModel] = useState("qwen2.5:32b");
+    const [selectedModel, setSelectedModel] = useState("");
+    const [models, setModels] = useState<string[]>([]);
     const messagesEndRef = useRef<HTMLDivElement>(null);
 
     const scrollToBottom = () => {
@@ -19,12 +20,24 @@ export default function ChatInterface() {
     };
 
     useEffect(() => {
+        fetch("http://localhost:8000/models")
+            .then((res) => res.json())
+            .then((data) => {
+                setModels(data.models);
+                if (data.models.length > 0) {
+                    setSelectedModel(data.models[0]);
+                }
+            })
+            .catch((err) => console.error("Failed to fetch models:", err));
+    }, []);
+
+    useEffect(() => {
         scrollToBottom();
     }, [messages]);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!input.trim()) return;
+        if (!input.trim() || !selectedModel) return;
 
         const userMessage: Message = { role: "user", content: input };
         setMessages((prev) => [...prev, userMessage]);
@@ -59,9 +72,12 @@ export default function ChatInterface() {
 
                 setMessages((prev) => {
                     const newMessages = [...prev];
-                    const lastMessage = newMessages[newMessages.length - 1];
+                    const lastMessageIndex = newMessages.length - 1;
+                    const lastMessage = { ...newMessages[lastMessageIndex] }; // Create a copy
+
                     if (lastMessage.role === "assistant") {
                         lastMessage.content += chunkValue;
+                        newMessages[lastMessageIndex] = lastMessage; // Update the array with the copy
                     }
                     return newMessages;
                 });
@@ -111,15 +127,21 @@ export default function ChatInterface() {
                     AI Chat Prototype
                 </h1>
                 <div className="flex gap-2">
-                    <select
+                      <select
                         value={selectedModel}
                         onChange={(e) => setSelectedModel(e.target.value)}
                         className="bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    >
-                        <option value="qwen2.5:32b">Qwen 2.5 (32B)</option>
-                        <option value="qwen2.5:14b">Qwen 2.5 (14B)</option>
-                        <option value="qwen2.5:7b">Qwen 2.5 (7B)</option>
-                        <option value="llama3:8b">Llama 3 (8B)</option>
+                        disabled={models.length === 0}
+                      >
+                        {models.length === 0 ? (
+                            <option value="">No models found</option>
+                        ) : (
+                            models.map((model) => (
+                                <option key={model} value={model}>
+                                    {model}
+                                </option>
+                            ))
+                        )}
                     </select>
                     <button
                         onClick={handleExport}
@@ -169,13 +191,13 @@ export default function ChatInterface() {
                         type="text"
                         value={input}
                         onChange={(e) => setInput(e.target.value)}
-                        placeholder="Type your message..."
-                        className="flex-1 bg-gray-800 border-gray-700 text-white rounded-xl px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        disabled={isLoading}
+                        placeholder={models.length === 0 ? "No models available" : "Type your message..."}
+                        className="flex-1 bg-gray-800 border-gray-700 text-white rounded-xl px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed"
+                        disabled={isLoading || models.length === 0}
                     />
                     <button
                         type="submit"
-                        disabled={isLoading}
+                        disabled={isLoading || models.length === 0}
                         className="bg-blue-600 hover:bg-blue-700 text-white rounded-xl px-6 py-2 font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                         Send
