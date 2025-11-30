@@ -7,6 +7,7 @@ import remarkGfm from "remark-gfm";
 interface Message {
     role: "user" | "assistant";
     content: string;
+    execution_time?: number;
 }
 
 export default function ChatInterface() {
@@ -51,6 +52,8 @@ export default function ChatInterface() {
         // Add empty assistant message to start streaming into
         setMessages((prev) => [...prev, { role: "assistant", content: "" }]);
 
+        const startTime = performance.now();
+
         try {
             const response = await fetch("http://localhost:8000/chat", {
                 method: "POST",
@@ -73,6 +76,7 @@ export default function ChatInterface() {
             const decoder = new TextDecoder();
             let done = false;
             let buffer = "";
+            let firstTokenReceived = false;
 
             while (!done) {
                 const { value, done: doneReading } = await reader.read();
@@ -90,6 +94,24 @@ export default function ChatInterface() {
                         const data = JSON.parse(line);
 
                         if (data.type === "content") {
+                            if (!firstTokenReceived) {
+                                const endTime = performance.now();
+                                const executionTime = (endTime - startTime) / 1000; // Convert to seconds
+                                firstTokenReceived = true;
+
+                                setMessages((prev) => {
+                                    const newMessages = [...prev];
+                                    const lastMessageIndex = newMessages.length - 1;
+                                    const lastMessage = { ...newMessages[lastMessageIndex] };
+
+                                    if (lastMessage.role === "assistant") {
+                                        lastMessage.execution_time = executionTime;
+                                        newMessages[lastMessageIndex] = lastMessage;
+                                    }
+                                    return newMessages;
+                                });
+                            }
+
                             setMessages((prev) => {
                                 const newMessages = [...prev];
                                 const lastMessageIndex = newMessages.length - 1;
@@ -112,6 +134,7 @@ export default function ChatInterface() {
                     }
                 }
             }
+
         } catch (error) {
             console.error("Error:", error);
             setMessages((prev) => [
